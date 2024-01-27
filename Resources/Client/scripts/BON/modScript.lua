@@ -1,0 +1,1 @@
+queueExtensionToLoad("BonRaceClient")
