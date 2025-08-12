@@ -2,8 +2,12 @@ activeRaces = {}
 activeUsers = {}
 playerStartQues = {}
 BonRaceDebug = false
+mpUserIdToSenderId = {}
+
 
 function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
+	
+	print("SenderId: "..sender_id)
     if string.sub(message, 1, 1) ~= '/' then
         return 0
     end
@@ -13,14 +17,19 @@ function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
         table.insert(args, arg)
     end
 
+	
     local mpIdentifiers = MP.GetPlayerIdentifiers(sender_id)
     local mpUserId = mpIdentifiers.beammp
     local mpUserIp = mpIdentifiers.ip
     local mpUserNick = MP.GetPlayerName(sender_id)
-
+	
+	mpUserIdToSenderId[mpUserId] = sender_id
+	
     if args[1] == "/debug" then
          BonRaceDebug = not BonRaceDebug
+		 print("BonRaceDebug set to: "..tostring(BonRaceDebug))
     end
+	
     if args[1] == "/fatalError" then
          print(Util.JsonEncode(activeRaces))
          print(Util.JsonEncode(activeUsers))
@@ -43,7 +52,11 @@ function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
     end
     if args[1] == "/loadrace" then
         local raceName = args[2]
+		
+		
         debugPrint("/loadrace "..raceName)
+		
+		
         if raceNameExists(raceName) and raceNotAlreadyInProgress(raceName) then
             
             activeRaces[raceName] = {
@@ -57,19 +70,23 @@ function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
             debugPrint("lalala")
             activeRaces[raceName].race = fetchRaceFromFile(raceName)
             debugPrint("gogogo")
-            AddPlayerToRace(mpUserId, raceName)
-
-            raceLoadedSucessfully(sender_id, raceName)
+            if AddPlayerToRace(mpUserId, raceName) then
+				raceLoadedSucessfully(sender_id, raceName)
+			end
         else 
+		
             cantLoadRace(sender_id, raceName)
         end
+		
         return 1
     end
 
     if args[1] == "/join" then
         local raceName = args[2]
         debugPrint("/join "..raceName)
-        AddPlayerToRace(mpUserId, raceName)
+        if AddPlayerToRace(mpUserId, raceName) then
+			sendInfoMessage(sender_id, "Joined race: "..raceNamesString)
+		end
         return 1
     end
 
@@ -100,6 +117,8 @@ function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
 end
 function sendInfoMessage(sender_id, message, icon)
    icon = icon or "warning"
+   print(sender_id)
+   debugPrint("MP_Warning sent to"..sender_id..": "..message)
    MP.TriggerClientEventJson(sender_id, "BonRaceInfoMessage", { message = message, icon = "warning" })
 end
 function startTheRace(raceName)
@@ -152,8 +171,9 @@ end
 
 
 function AddPlayerToRace(mpUserId, raceName)
-    debugPrint("Adding player to race")
+    debugPrint("Trying to add "..mpUserId.." to race: "..raceName.."")
     if raceNameLoaded(raceName) and PlayerNotInARace(mpUserId) and raceNotTooLateToJoin(raceName) then
+		debugPrint("Adding player to race")
         activeUsers[mpUserId] = raceName
         playerCount = #activeRaces[raceName].players + 1
         activeRaces[raceName].players[mpUserId] = {
@@ -163,19 +183,67 @@ function AddPlayerToRace(mpUserId, raceName)
             allowedStartTime = nil,
             startTime = nil,
             checkPointTimes = {},
-            finishTime = {}
+            finishTime = {},
+			nextCheckpoint = 1
         }
+		print("Got here 1")
         SpawnRaceTriggersForPlayer(mpUserId, raceName)
         raceJoinSucessfull(mpUserId) 
+		return true
+	else
+		debugPrint("Failed to add "..mpUserId.." to race: "..raceName.."...")
+		debugPrint("- raceNameLoaded: "..tostring(raceNameLoaded(raceName)))
+		debugPrint("- PlayerNotInARace: "..tostring(PlayerNotInARace(mpUserId)))
+		debugPrint("- raceNotTooLateToJoin: "..tostring(raceNotTooLateToJoin(raceName)))
+		return false
     end
 end
 
+function getRaceTriggerBy(raceName, triggerType, triggerNumber)
+    local triggers = activeRaces[raceName].race.triggers
+	print(triggers)
+    for _, t in pairs(triggers) do
+        if t.TriggerType == triggerType then
+            local num = tonumber(t.TriggerNumber)
+            if triggerNumber == nil or (num ~= nil and num == tonumber(triggerNumber)) then
+                return t
+            end
+        end
+    end
+	debugPrint("Trigger Not Found... raceName, triggerType, triggerNumber: "..raceName.." "..triggerType.." "..triggerNumber)
+    return nil
+end
+
 function SpawnRaceTriggersForPlayer(mpUserId, raceName)
-    debugPrint("SpawningTriggersForPlayer")
+	print("Got here 2")
+    debugPrint("SpawningInitialTriggersForPlayer")
     local sender_id = getBonServerPlayerInfo().SenderIdFromBeamMPID[mpUserId]
-    
-    for key, value in pairs(activeRaces[raceName].race.triggers) do
-        MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", value)
+
+    local triggers = activeRaces[raceName].race.triggers
+	print(triggers)
+    -- Send StartPosition triggers
+    for _, t in pairs(triggers) do
+        if t.TriggerType == "start" then
+            debugPrint("BonRaceCreateTrigger StartPosition -> "..sender_id)
+            MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", t)
+        end
+    end
+
+    -- Send Finish triggers
+    for _, t in pairs(triggers) do
+        if t.TriggerType == "end" then
+            debugPrint("BonRaceCreateTrigger Finish -> "..sender_id)
+            MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", t)
+        end
+    end
+
+    -- Send first checkpoint only
+    local firstCP = getRaceTriggerBy(raceName, "cp", 1)
+    if firstCP then
+        debugPrint("BonRaceCreateTrigger First CheckPoint -> "..sender_id)
+        MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", firstCP)
+    else
+        debugPrint("No checkpoint #1 found for race "..raceName)
     end
 end
 
@@ -218,6 +286,7 @@ end
 function coutdownPlayer(raceName, mpUserId)
 	local serverPlayerInfo = getBonServerPlayerInfo()
     local thisSenderId = serverPlayerInfo.SenderIdFromBeamMPID[mpUserId]
+	debugPrint("MP_TriggerClient BonRaceStartCountdown sent to"..mpUserIdToSenderId[mpUserId])
     MP.TriggerClientEvent(thisSenderId, "BonRaceStartCountdown", "")
 end
 
@@ -302,11 +371,12 @@ function raceNameLoaded(raceName)
     return isLoaded
 end
 function raceJoinSucessfull(mpUserId)
-    sendInfoMessage(sender_id, "You have joined the race: "..activeUsers[mpUserId], "check")
+	print("raceJoinMeh "..mpUserId)
+    sendInfoMessage(mpUserIdToSenderId[mpUserId], "You have joined the race: "..activeUsers[mpUserId], "check")
 	debugPrint("Player "..mpUserId.." added to race")
 end
 function raceNotAlreadyInProgress(raceName)
-    local result = activeRaces[race] == nil
+    local result = activeRaces[raceName] == nil
     debugPrint("raceNotAlreadyInProgress: "..tostring(result))
 	return result
 end
@@ -396,12 +466,34 @@ function handleOnBeamNGTriggerBonRace(sender_id, data) --From Client: {"triggerI
         debugPrint("triggerStartExit",tostring(dataTable.osclockhp))
         activeRaces[triggerInfo.raceName].players[mpUserId].startTime = dataTable.osclockhp
         checkIfPlayerStartedTooSoon(triggerInfo.raceName, mpUserId, sender_id)
+		MP.TriggerClientEventJson(sender_id, "BonRaceRemoveTrigger", { triggerName = triggerInfo.triggerName })
     end
 
     if triggerInfo.event == "enter" and triggerInfo.TriggerType == "CheckPoint" then
         debugPrint("cpEnter: "..triggerInfo.TriggerNumber.." ",tostring(dataTable.osclockhp))
         activeRaces[triggerInfo.raceName].players[mpUserId].checkPointTimes[triggerInfo.TriggerNumber] = dataTable.osclockhp
         sendRaceTimeInformation(triggerInfo, mpUserId, sender_id, dataTable.osclockhp)
+		-- Progressive checkpoint streaming per player
+        do
+            local raceName = triggerInfo.raceName
+
+            -- Remove the checkpoint the player just crossed
+            MP.TriggerClientEventJson(sender_id, "BonRaceRemoveTrigger", { triggerName = triggerInfo.triggerName })
+
+            -- Compute next checkpoint (TriggerNumber is a string; coerce safely)
+            local nextNum = (tonumber(triggerInfo.TriggerNumber) or 0) + 1
+            activeRaces[raceName].players[mpUserId].nextCheckpoint = nextNum
+
+            -- Spawn the next checkpoint for this player if it exists
+            local nextCP = getRaceTriggerBy(raceName, "cp", nextNum)
+            if nextCP then
+                MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", nextCP)
+                debugPrint("Spawned next CP "..nextNum.." for "..mpUserId)
+            else
+                debugPrint("No more checkpoints after "..(triggerInfo.TriggerNumber or "?").." for race "..raceName)
+                -- Finish is already present
+            end
+        end
     end
 
     if triggerInfo.event == "enter" and triggerInfo.TriggerType == "Finish" then
