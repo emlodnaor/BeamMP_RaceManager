@@ -1,10 +1,27 @@
+------ Server -------
+---------------------
+--- BonRaceRunner ---
+---------------------
+---- Authored by ----
+-- Beams of Norway --
+---------------------
 activeRaces = {}
 activeUsers = {}
 playerStartQues = {}
 BonRaceDebug = false
 mpUserIdToSenderId = {}
+hornUsage = {}
 
 
+function ForceUnload(raceName)
+	if activeRaces[raceName] ~= nil then
+		print(Util.JsonEncode(activeRaces[raceName]))
+        activeRaces[raceName] = nil
+        MP.SendChatMessage(-1, raceName.." race is Finished!")
+	else
+		MP.SendChatMessage(sender_id, raceName.." not loaded...")
+	end
+end
 function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
 	
 	print("SenderId: "..sender_id)
@@ -42,13 +59,8 @@ function BONRaceRunnerChatMessageHandler(sender_id, sender_name, message)
     end
     if args[1] == "/forceUnload" then
         local raceName = args[2]
-        if activeRaces[raceName] ~= nil then
-            print(Util.JsonEncode(activeRaces[raceName]))
-            activeRaces[raceName] = nil
-            MP.SendChatMessage(-1, "Forced unload of "..raceName)
-        else
-            MP.SendChatMessage(sender_id, raceName.." not loaded...")
-        end
+		ForceUnload(raceName)
+        
     end
     if args[1] == "/loadrace" then
         local raceName = args[2]
@@ -447,8 +459,25 @@ function cantLoadRace(sender_id, raceName)
     end 
     debugPrint("Cannot load race for sender_id " .. sender_id)
 end
-
-function handleOnBeamNGTriggerBonRace(sender_id, data) --From Client: {"triggerInfo":{"triggerName":"BonRaceTrigger_a_StartPosition_1","TriggerNumber":"1","event":"enter","TriggerType":"StartPosition","raceName":"a"},"osTime":1706040970,"rot":{"x":-0.0007559384312,"y":-0.01332520345,"z":0.0007074736053,"w":0.9999106795},"pos":{"x":555.4703979,"y":73.56756592,"z":89.06059265},"eventType":"BonRaceTrigger"}
+function allPlayersAreDone(raceName)
+	for key, value in pairs(activeRaces[raceName].players) do
+		print("-----------------------------------")
+		print(value)
+		print("...................................")
+		print(value.finishTime)
+		print("-----------------------------------")
+		if next(value.finishTime) == nil then
+			return false
+		end
+	end
+	return true
+end
+function CheckIfAllPlayersAreDone(raceName)
+	if allPlayersAreDone(raceName) then
+		ForceUnload(raceName)
+	end
+end
+function handleOnBeamNGTriggerBonRace(sender_id, data) 
 	local mpUserId = MP.GetPlayerIdentifiers(sender_id).beammp
     if activeUsers[mpUserId] == nil then
         debugPrint("player not in active race")
@@ -503,7 +532,10 @@ function handleOnBeamNGTriggerBonRace(sender_id, data) --From Client: {"triggerI
         debugPrint(mpUserId.." finished race!")
         --debugPrint(Util.JsonEncode(activeRaces[triggerInfo.raceName]))
         removeRaceTriggers(sender_id, triggerInfo.raceName)
-        activeUsers[mpUserId] = nil    
+        activeUsers[mpUserId] = nil  
+
+		CheckIfAllPlayersAreDone(triggerInfo.raceName)
+		
     end
 
     function sendRaceTimeInformation(triggerInfo, mpUserId, sender_id, osclockhp)
@@ -525,14 +557,14 @@ function handleOnBeamNGTriggerBonRace(sender_id, data) --From Client: {"triggerI
             
             sendNormalMessage(sender_id, "DISQUALIFIED!")
             sendErrorMessage(sender_id, "Headstart by "..timeDiff)
-            MP.TriggerClientEvent(-1, "BonRaceFatalError", "") --fastest way to unload triggers
+			
+			CheckIfAllPlayersAreDone(raceName)
+            MP.TriggerClientEvent(sender_id, "BonRaceFatalError", "") --fastest way to unload triggers
         else
             sendNormalMessage(sender_id, "Reaction time: "..timeDiff)
         end
         ::continue::
     end
-
-
     -- debugPrint(data)
     if data.eventType == "BonRaceTrigger" then
         --if data.triggerName = ""
@@ -564,12 +596,40 @@ function removeRaceTriggers(sender_id, raceName)
         MP.TriggerClientEventJson(sender_id, "BonRaceRemoveTrigger", { triggerName = value.triggerName })
     end
 end
+function handleOnVehicleSpawn(sender_id)
+	MP.TriggerClientEventJson(sender_id, "BonRaceLoadHornDetector", { })
+end
+
+function handlePlayerHorn(sender_id, data)
+	dataTable = Util.JsonDecode(data) 
+	if hornUsage[sender_id] == nil then
+		hornUsage[sender_id] = {}
+	end
+	if dataTable.state == "on" then
+		hornUsage[sender_id].onTime = os.clock()
+	end
+	if dataTable.state == "off" then
+		hornUsage[sender_id].offTime = os.clock()
+		
+		honkDuration = hornUsage[sender_id].offTime - hornUsage[sender_id].onTime
+		print("Honk time for "..sender_id..": "..honkDuration)
+		if honkDuration > 1 then
+			print("Searching for nearby race autoloaders...")
+		end
+	end
+	
+end
+function doThingsEverySecond()
+	BonRaceSendNextPlayer()
+end
 function onInit()
     debugPrint("RaceRunner.lua loaded")
     MP.RegisterEvent("onChatMessage", "BONRaceRunnerChatMessageHandler") --change to spesific name?
     MP.RegisterEvent("onBeamNGTriggerBonRace", "handleOnBeamNGTriggerBonRace")
     MP.RegisterEvent("BonRaceReportClientStartTime", "handleBonRaceReportClientStartTime")
     MP.RegisterEvent("BonRaceSendNextPlayer", "handleBonRaceSendNextPlayer")
-    MP.CreateEventTimer("BonRaceSendNextPlayer", 1000)
+	MP.RegisterEvent("playerHorn", "handlePlayerHorn")
+	MP.RegisterEvent("onVehicleSpawn", "handleOnVehicleSpawn")
+    MP.CreateEventTimer("doThingsEverySecond", 1000)
     end
 onInit() --unsure why this is needed here, but not in the other file...
