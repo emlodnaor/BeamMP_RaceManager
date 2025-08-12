@@ -44,13 +44,15 @@ function BON_RallyCreatorChatMessageHandler(sender_id, sender_name, message)
                 name = raceName,
                 creator = mpUserId,
                 triggers = {},
-                laps = 1
+                laps = 1,
+				startInterval = 30
             }
             races[raceName].startPosition[1] = userPosRot
             activeCreators[mpUserId] = raceName
             print(activeCreators)
-            local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_1"
-            triggerData = spawnClientTrigger(sender_id, triggerName, userPosRot, "start")
+			local StartNumber = #races[raceName].startPosition + 1
+            local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber --put number into thing
+            triggerData = spawnClientTrigger(sender_id, triggerName, userPosRot, "start", StartNumber)
             races[raceName].triggers[1] = triggerData
             raceCreatedSucessfully(sender_id, raceName)
         else 
@@ -76,18 +78,25 @@ function BON_RallyCreatorChatMessageHandler(sender_id, sender_name, message)
     return 1
 end
 
-function spawnClientTrigger(sender_id, name, userPosRot, type)
+function spawnClientTrigger(sender_id, name, userPosRot, type, TriggerNumber)
     
     local data = { 
         pos = userPosRot.pos, 
         rot = userPosRot.rot, 
-        scale = {x = 8, y = 1, z = 2}, 
+        scale = {x = 8, y = 2, z = 2}, 
         color = {r = 50, g = 255, b = 20, a = 100},
-        triggerName = name
+        triggerName = name,
+		TriggerType = type,
+		TriggerNumber = TriggerNumber
     }
     if type == "start" then
         data.scale.x = 3
         data.scale.y = 5
+    end
+	if type == "autoloader" then
+        data.scale.x = 10
+        data.scale.y = 10
+		data.color = {r = 255, g = 255, b = 50, a = 100}
     end
     if type == "cp" then
         data.color = {r = 50, g = 70, b = 255, a = 100}
@@ -110,13 +119,27 @@ function ContinueRaceCreation(sender_id, sender_name, message)
     local raceName = activeCreators[mpUserId]
     local command = args[1]
 
+    if args[1] == "/startInterval" then
+		races[raceName].startInterval = args[2]
+	end
+	if args[1] == "/autoloader" then
+        local posRot = getUserPosRot(sender_id)
+        
+        races[raceName].autoloaderPosition = posRot
+        sendNormalMessage(sender_id, raceName.." AutoLoaderPosition set.")
+        local triggerName = "BonRaceTrigger_"..raceName.."_AutoLoader_"
+        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "autoloader", 0)
+        triggerNumber = #races[raceName].triggers + 1
+        races[raceName].triggers[triggerNumber] = triggerData
+        return
+    end
     if args[1] == "/start" then
         local posRot = getUserPosRot(sender_id)
         local StartNumber = #races[raceName].startPosition + 1
         races[raceName].startPosition[StartNumber] = posRot
         sendNormalMessage(sender_id, raceName.." startPosition "..StartNumber.." set.")
         local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber
-        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "start")
+        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "start", StartNumber)
         triggerNumber = #races[raceName].triggers + 1
         races[raceName].triggers[triggerNumber] = triggerData
         return
@@ -128,7 +151,7 @@ function ContinueRaceCreation(sender_id, sender_name, message)
 
         sendNormalMessage(sender_id, raceName.." checkpoint "..cpNumber.." set.")
         local triggerName = "BonRaceTrigger_"..raceName.."_CheckPoint_"..cpNumber
-        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "cp")
+        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "cp", cpNumber)
         triggerNumber = #races[raceName].triggers + 1
         races[raceName].triggers[triggerNumber] = triggerData
         return
@@ -139,7 +162,7 @@ function ContinueRaceCreation(sender_id, sender_name, message)
         races[raceName].finishPoints = posRot
         sendNormalMessage(sender_id, raceName.." Finsih set")
         local triggerName = "BonRaceTrigger_"..raceName.."_Finish_"..finishNumber
-        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "end")
+        triggerData = spawnClientTrigger(sender_id, triggerName, posRot, "end", finishNumber)
         triggerNumber = #races[raceName].triggers + 1
         races[raceName].triggers[triggerNumber] = triggerData
         return
@@ -149,6 +172,7 @@ function ContinueRaceCreation(sender_id, sender_name, message)
         if laps ~= nil then
             if laps >= 1 then
                 races[raceName].laps = laps
+				sendNormalMessage(sender_id, raceName.." Laps set to "..laps)
             else
                 sendErrorMessage(sender_id, "WrongArgument", args[2].." is not a valid number, example use: '/laps 3'")
             end
