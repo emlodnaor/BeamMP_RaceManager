@@ -1,3 +1,10 @@
+------ Server -------
+---------------------
+--- BonRaceCreator --
+---------------------
+---- Authored by ----
+-- Beams of Norway --
+---------------------
 
 races = {}
 activeCreators = {}
