@@ -1,3 +1,10 @@
+------ Client -------
+---------------------
+--- BonRaceClient ---
+---------------------
+---- Authored by ----
+-- Beams of Norway --
+---------------------
 local M = {}
 
 function logeM(string)
@@ -134,7 +141,11 @@ end
 
 
 function BonRaceDISQUALIFIED(data)
-    be:getPlayerVehicle(0):applyClusterVelocityScaleAdd(be:getPlayerVehicle(0):getRefNodeId(), 0, math.random(5, 15), math.random(5, 15), math.random(25, 50))
+	be:getPlayerVehicle(0):applyClusterVelocityScaleAdd(be:getPlayerVehicle(0):getRefNodeId(), 0, math.random(-50, -15), math.random(-15, 15), math.random(25, 50))
+end
+
+function BonRaceLoadHornDetector(data)
+	getPlayerVehicle(0):queueLuaCommand("extensions.reload('hornDetector')")
 end
 
 AddEventHandler("BonRaceFatalError", BonRaceFatalError)
@@ -146,6 +157,7 @@ AddEventHandler("BonRaceNormalMessage", BonRaceNormalMessage)
 AddEventHandler("BonRaceInfoMessage", BonRaceInfoMessage) 
 AddEventHandler("BonRaceErrorMessage", BonRaceErrorMessage)
 AddEventHandler("BonRaceTeleportInstuctions", BonRaceTeleportInstuctions)
+AddEventHandler("BonRaceLoadHornDetector", BonRaceLoadHornDetector)
 
 M.BonRaceFatalError = BonRaceFatalError
 M.BonRaceDISQUALIFIED = BonRaceDISQUALIFIED
