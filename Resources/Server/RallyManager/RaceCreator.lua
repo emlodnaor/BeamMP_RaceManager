@@ -230,7 +230,7 @@ function deleteRace(sender_id, mpUserId, raceName)
     if not raceNameAvailable(raceName) then
         local race = fetchRaceFromFile(raceName)
         if race.creator == mpUserId then
-            local filePath = "raceConfig_"..raceName..".json"
+            local filePath = "Resources\\Server\\RallyManager\\Races\\raceConfig_"..raceName..".json"
             if os.remove(filePath) then
                 sendInfoMessage(sender_id, "Race: '"..raceName.."' deleted successfully.")    
             else
@@ -243,7 +243,7 @@ function deleteRace(sender_id, mpUserId, raceName)
     end
 end
 function fetchRaceFromFile(raceName)
-	local file = io.open("raceConfig_"..raceName..".json", "r")
+	local file = io.open("Resources\\Server\\RallyManager\\Races\\raceConfig_"..raceName..".json", "r")
     if file == nil then
         return nil
     end
@@ -276,7 +276,7 @@ end
 function saveRace(raceName)
 	jsonRace = Util.JsonEncode(races[raceName])
     -- Open the file for writing
-    local file = io.open("raceConfig_"..raceName..".json", "w")
+    local file = io.open("Resources\\Server\\RallyManager\\Races\\raceConfig_"..raceName..".json", "w")
 
     if file == nil then
         print("Error opening file for writing.")
@@ -292,7 +292,7 @@ end
 
 function raceNameAvailable(raceName)
     print("Checking availability for race " .. raceName)
-    local file = io.open("raceConfig_"..raceName..".json", "r")
+    local file = io.open("Resources\\Server\\RallyManager\\Races\\raceConfig_"..raceName..".json", "r")
     local dontExist = file == nil
     if not dontExist then file:close() end
     return dontExist
