@@ -14,13 +14,12 @@ end
 
 local function onWorldReadyState(worldReadyState)
   if worldReadyState == 2 then
-     -- meh
+     TriggerServerEvent("PlayerWorldReadyState", jsonEncode({state = worldReadyState}))
   end
 end
 
 local function onBeamNGTrigger(data)
     local currentOsClockHp = os.clockhp()
-    print(data.triggerName.." _ "..string.sub(data.triggerName, 1, 7))
     if string.sub(data.triggerName, 1, 7) == "BonRace" and MPVehicleGE.isOwn(data.subjectID) then
         local triggerInfo = getTriggerInfo(data)
         
@@ -29,9 +28,7 @@ local function onBeamNGTrigger(data)
         local raceName = triggerInfo.raceName
         
         local jsonData = jsonEncode({eventType = "BonRaceTrigger", triggerInfo = triggerInfo, pos = pos, rot = rot, osclockhp = currentOsClockHp})
-        print(jsonData)
         TriggerServerEvent("onBeamNGTriggerBonRace", jsonData)
-        print("Trigger Sent")
     end
 end
 function split_string(input_string, delimiter)
@@ -76,6 +73,7 @@ end
 function handleInform(message)
     print("Info from Server: "..message)
     local big = string.len(message) < 10
+	guihooks.trigger('ScenarioFlashMessageClear')
     guihooks.trigger('ScenarioFlashMessage', {{message, 3.0, 0, big}} ) 
 end
 
@@ -102,7 +100,9 @@ local function BonRaceRemoveTrigger(data)
     local dataTable = jsonDecode(data)
     local triggerName = dataTable.triggerName
     local markerObject = scenetree.findObject(triggerName)
-    markerObject:deleteObject()
+	if markerObject then
+		markerObject:deleteObject()
+	end
 end
 
 function BonRaceTeleportInstuctions(data)
@@ -114,6 +114,7 @@ function BonRaceTeleportInstuctions(data)
 end
 
 function BonRaceStartCountdown(data)
+	guihooks.trigger('ScenarioFlashMessageClear')
     local startTime = os.clockhp() + 3
     TriggerServerEvent("BonRaceReportClientStartTime", jsonEncode({osclockhp = startTime}))
     guihooks.trigger('ScenarioFlashMessage', {{"3", 1.0, "Engine.Audio.playOnce('AudioGui', 'event:UI_Countdown1')", true}}) 
@@ -131,10 +132,15 @@ function removeAllBonRaceTriggers()
     
     for i = 1, #allTriggers do
         local triggerName = allTriggers[i]
-        local prefix = "BonRaceTrigger_"
+		local prefix = "BonRaceTrigger_"
         if string.sub(triggerName, 1, #prefix) == prefix then
-            local markerObject = scenetree.findObject(triggerName)
-            markerObject:deleteObject()
+			local data = {}
+			data.triggerName = triggerName
+			local triggerInfo = getTriggerInfo(data)
+			if triggerInfo.TriggerType ~= "AutoLoader" then
+				local markerObject = scenetree.findObject(triggerName)
+				markerObject:deleteObject()
+			end
         end
     end
 end
@@ -142,6 +148,7 @@ end
 
 function BonRaceDISQUALIFIED(data)
 	be:getPlayerVehicle(0):applyClusterVelocityScaleAdd(be:getPlayerVehicle(0):getRefNodeId(), 0, math.random(-50, -15), math.random(-15, 15), math.random(25, 50))
+	be:getPlayerVehicle(0):queueLuaCommand('beamstate.breakAllBreakgroups()')
 end
 
 function BonRaceLoadHornDetector(data)
@@ -158,6 +165,7 @@ AddEventHandler("BonRaceInfoMessage", BonRaceInfoMessage)
 AddEventHandler("BonRaceErrorMessage", BonRaceErrorMessage)
 AddEventHandler("BonRaceTeleportInstuctions", BonRaceTeleportInstuctions)
 AddEventHandler("BonRaceLoadHornDetector", BonRaceLoadHornDetector)
+
 
 M.BonRaceFatalError = BonRaceFatalError
 M.BonRaceDISQUALIFIED = BonRaceDISQUALIFIED
