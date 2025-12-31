@@ -89,8 +89,8 @@ function BON_RallyCreatorChatMessageHandler(sender_id, sender_name, message)
             races[raceName].startPosition[1] = userPosRot
             activeCreators[mpUserId] = raceName
             print(activeCreators)
-			local StartNumber = #races[raceName].startPosition + 1
-            local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber --put number into thing
+			local StartNumber = #races[raceName].startPosition
+			local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber --put number into thing
             local triggerData = spawnClientTrigger(sender_id, triggerName, userPosRot, "start", StartNumber)
             races[raceName].triggers[1] = triggerData
             raceCreatedSucessfully(sender_id, raceName)
@@ -106,6 +106,7 @@ function BON_RallyCreatorChatMessageHandler(sender_id, sender_name, message)
         debugPrint()
         celcelRaceMaking(sender_id, mpUserId, raceName)
         debugPrint()
+		--Todo: Remove all triggers client side
         deleteRace(sender_id, mpUserId, raceName)
     end
     
