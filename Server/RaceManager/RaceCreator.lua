@@ -89,8 +89,8 @@ function BON_RallyCreatorChatMessageHandler(sender_id, sender_name, message)
             races[raceName].startPosition[1] = userPosRot
             activeCreators[mpUserId] = raceName
             print(activeCreators)
-			local StartNumber = #races[raceName].startPosition
-			local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber --put number into thing
+            local StartNumber = #races[raceName].startPosition
+            local triggerName = "BonRaceTrigger_"..raceName.."_StartPosition_"..StartNumber --put number into thing
             local triggerData = spawnClientTrigger(sender_id, triggerName, userPosRot, "start", StartNumber)
             races[raceName].triggers[1] = triggerData
             raceCreatedSucessfully(sender_id, raceName)
@@ -220,7 +220,7 @@ function ContinueRaceCreation(sender_id, sender_name, message)
                 sendErrorMessage(sender_id, "WrongArgument", args[2].." is not a valid number, example use: '/laps 3'")
             end
         else
-        sendErrorMessage(sender_id, "WrongArgument", args[2].." is not a number, example use: '/laps 3'")
+        sendErrorMessage(sender_id, "WrongArgument", args[2] or "".." is not a number, example use: '/laps 3'")
         end
     end
 
@@ -311,6 +311,50 @@ function sendNormalMessage(sender_id, message)
 end
 
 function saveRace(raceName)
+	-- Expand checkpoints for multi-lap races
+    local laps = races[raceName].laps or 1
+    if laps > 1 then
+        local originalCheckPoints = races[raceName].checkPoints
+        local originalTriggers = races[raceName].triggers
+        local cpCount = #originalCheckPoints
+        
+        -- Store original single-lap checkpoints
+        local singleLapCPs = {}
+        local singleLapTriggers = {}
+        for i = 1, cpCount do
+            singleLapCPs[i] = originalCheckPoints[i]
+        end
+        
+        -- Find original CP triggers
+        for _, trigger in ipairs(originalTriggers) do
+            if trigger.TriggerType == "cp" then
+                table.insert(singleLapTriggers, trigger)
+            end
+        end
+        
+        -- Expand checkpoints for additional laps
+        for lap = 2, laps do
+            for cpIdx = 1, cpCount do
+                local globalCpNum = (lap - 1) * cpCount + cpIdx
+                
+                -- Add checkpoint position (reuse same position)
+                races[raceName].checkPoints[globalCpNum] = singleLapCPs[cpIdx]
+                
+                -- Add trigger with new global number
+                local newTrigger = {
+                    pos = singleLapTriggers[cpIdx].pos,
+                    rot = singleLapTriggers[cpIdx].rot,
+                    scale = singleLapTriggers[cpIdx].scale,
+                    color = singleLapTriggers[cpIdx].color,
+                    triggerName = "BonRaceTrigger_"..raceName.."_CheckPoint_"..globalCpNum,
+                    TriggerType = "cp",
+                    TriggerNumber = globalCpNum
+                }
+                table.insert(races[raceName].triggers, newTrigger)
+            end
+        end
+    end
+	
 	jsonRace = Util.JsonEncode(races[raceName])
     -- Open the file for writing
     local file = io.open("Resources\\Server\\RaceManager\\Races\\raceConfig_"..sanitizeRaceName(raceName)..".json", "w")
