@@ -277,7 +277,7 @@ local function getTotalCheckpoints(raceName)
 	return maxCP
 end
 
-local function SpawnRaceTriggersForPlayer(mpUserId, raceName)
+local function SpawnRaceTriggersForPlayer(mpUserId, raceName, startPositionIndex)
 	local serverPlayerInfo = getBonServerPlayerInfo()
 	local sender_id = serverPlayerInfo.SenderIdFromBeamMPID[mpUserId]
 	local tpl = raceTemplates[raceName]
@@ -286,7 +286,9 @@ local function SpawnRaceTriggersForPlayer(mpUserId, raceName)
 	
 	for _, t in pairs(tpl.triggers) do
 		if normalizeType(t.TriggerType) == "start" then
-			MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", t)
+			if t.TriggerNumber == startPositionIndex then
+				MP.TriggerClientEventJson(sender_id, "BonRaceCreateTrigger", t)
+			end
 		end
 	end
 	for _, t in pairs(tpl.triggers) do
@@ -626,7 +628,7 @@ local function tickCountdowns()
 				goto continue_tickCountdown
 			end
 			
-			SpawnRaceTriggersForPlayer(mpUserId, item.raceName)
+			SpawnRaceTriggersForPlayer(mpUserId, item.raceName, item.slot)
 			teleportPlayer(item.raceName, mpUserId, item.slot)
 			MP.TriggerClientEvent(item.sender_id, "BonRaceStartCountdown", "")
 			table.remove(pendingCountdowns, i)
@@ -787,7 +789,8 @@ local function onPlayerFinished(raceName, mpUserId, finishNum, tstamp, sender_id
 
 	elseif ps.gridId then
 		-- Grid flow
-		inst = st.activeInstances[ps.gridId]
+		local gridId = ps.gridId
+		inst = st.activeInstances[gridId]
 		if inst and inst.players and inst.players[mpUserId] then
 			inst.players[mpUserId].finishTime[tonumber(finishNum) or 1] = tstamp
 			record = inst.players[mpUserId]
@@ -798,18 +801,17 @@ local function onPlayerFinished(raceName, mpUserId, finishNum, tstamp, sender_id
 			-- Detach player from grid context
 			playerState[mpUserId].gridId = nil
 
-			-- If everyone in this grid is now done (finished or DQ), prune the instance
-			if allGridPlayersDone(inst) then
-				st.activeInstances[ps.gridId] = nil
-			end
 		end
 	end
 
 	-- User messages
 	if record and record.allowedStartTime and tstamp then
 		local timeDiff = tstamp - record.allowedStartTime
-		local best = inst.playerBestTimes.finishTime
-		local bestDiffString = generateBestDiffString(best, timeDiff)
+		local bestDiffString = ""
+		if inst.playerBestTimes ~= nil then
+			local best = inst.playerBestTimes.finishTime
+			bestDiffString = generateBestDiffString(best, timeDiff)
+		end
 		
 		sendNormalMessage(sender_id, "Finish Time: "..timeTools.secondsToReadable(timeDiff).." "..bestDiffString)
 		
@@ -833,6 +835,13 @@ local function onPlayerFinished(raceName, mpUserId, finishNum, tstamp, sender_id
 		end
 	end
 
+	--
+	if ps.gridId then -- If everyone in a grid race is now done (finished or DQ), prune the instance
+		local inst = st.activeInstances[gridId]
+		if allGridPlayersDone(inst) then
+			st.activeInstances[gridId] = nil
+		end
+	end
 	-- Mark player eligible to restart this race via honk for a short window
 	playerState[mpUserId] = playerState[mpUserId] or {}
 	playerState[mpUserId].restartEligibleUntil = now() + RESTART_HONK_WINDOW
@@ -876,8 +885,11 @@ local function checkJumpStartAndReact(sender_id, raceName, mpUserId, startTime)
 		if ps.gridId then
 			inst = raceState[raceName].activeInstances[ps.gridId]
 		end
-		local best = inst.playerBestTimes.startTime
-		local bestDiffString = generateBestDiffString(best, diff)
+		local bestDiffString = ""
+		if inst.playerBestTimes ~= nil then
+			local best = inst.playerBestTimes.startTime
+			bestDiffString = generateBestDiffString(best, diff)
+		end
 		sendNormalMessage(sender_id, "Reaction time: "..timeTools.secondsToReadable(diff).." "..bestDiffString)
 		
 	end
@@ -944,8 +956,11 @@ function handleOnBeamNGTriggerBonRace(sender_id, data)
 
 		if allowed then
 			local diff = dataTable.osclockhp - allowed
-			local best = inst.playerBestTimes.checkPointTimes[cpId]
-			local bestDiffString = generateBestDiffString(best, diff)
+			local bestDiffString = ""
+			if inst.playerBestTimes ~= nil then
+				local best = inst.playerBestTimes.checkPointTimes[cpId]
+				bestDiffString = generateBestDiffString(best, diff)
+			end
 			
 			sendNormalMessage(sender_id, "Checkpoint "..tostring(triggerInfo.TriggerNumber).." : "..timeTools.secondsToReadable(diff).." "..bestDiffString)
 		end
